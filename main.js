@@ -116,6 +116,7 @@ function drawGameWorld() {
 }
 
 function updatePhysics(deltaSeconds){
+    updatePlayer(deltaSeconds);
     updateTongue(deltaSeconds);
 }
 
