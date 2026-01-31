@@ -24,8 +24,12 @@ let playerState = PLAYERSTATES.IDLE;
 const player = {
     x: 400,
     y: 350,
+    minRot: Math.PI/180 * -70,
+    maxRot: Math.PI/180 * 70,
+    rot: 0,
+    rotDirection: 1, // 1 for increasing, -1 for decreasing
     size: 50,
-    speed: 5
+    speed: 2 // radians per second
 };
 
 const tongue = {
@@ -104,20 +108,56 @@ function drawMenu() {
 }
 
 function drawGameWorld() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    //ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'lightblue';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    // Draw Player
-    ctx.drawImage(images.player, player.x, player.y, player.size, player.size);
+    drawTiles();
+}
 
-    //Draw Tongue
-    ctx.fillStyle = tongue.color;
-    ctx.fillRect(tongue.x, tongue.y - tongue.length, tongue.width, tongue.length);
+function drawTiles() {
+    const tileSize = 30;
+    ctx.fillStyle = 'green';
+    for (let x = 0; x < canvas.width/2; x += tileSize) {
+        for (let y = 0; y < canvas.height/2; y += tileSize) {
+            ctx.fillRect(x+canvas.width/4, y, tileSize - 2, tileSize - 2); // -2 for spacing
+        }
+    }
 }
 
 function updatePhysics(deltaSeconds){
     updatePlayer(deltaSeconds);
     updateTongue(deltaSeconds);
+}
+
+function updatePlayer(deltaSeconds) {
+    // Rotate back and forth automatically
+    player.rot += player.rotDirection * player.speed * deltaSeconds;
+
+    // Reverse direction at limits
+    if (player.rot >= player.maxRot) {
+        player.rot = player.maxRot;
+        player.rotDirection = -1;
+    } else if (player.rot <= player.minRot) {
+        player.rot = player.minRot;
+        player.rotDirection = 1;
+    }
+
+    ctx.save();
+    ctx.translate(player.x + player.size / 2, player.y + player.size / 2);
+    ctx.rotate(player.rot);
+    
+    // Only draw if image is loaded
+    if (images.player && images.player.complete) {
+        ctx.drawImage(images.player, -player.size / 2, -player.size / 2, player.size, player.size);
+    } else {
+        // Fallback: draw a red square if image not loaded
+        ctx.fillStyle = 'red';
+        ctx.fillRect(-player.size / 2, -player.size / 2, player.size, player.size);
+    }
+
+    ctx.fillStyle = tongue.color;
+    ctx.fillRect(0, -tongue.length, tongue.width, tongue.length);
+    ctx.restore();
 }
 
 function updateTongue(deltaSeconds) {
@@ -159,7 +199,7 @@ function gameLoop(timestamp) {
     const deltaSeconds = (timestamp - lastTime) / 1000;
     lastTime = timestamp;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    //ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     switch (currentState) {
         case GAMEESTATES.MENU:
@@ -167,9 +207,9 @@ function gameLoop(timestamp) {
             break;
             
         case GAMEESTATES.PLAYING:
+            drawGameWorld();
             updatePhysics(deltaSeconds);
             //checkCollisions();
-            drawGameWorld();
             break;
 
         case GAMEESTATES.PAUSED:
