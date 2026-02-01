@@ -1,3 +1,4 @@
+import {PLAYERSTATES, Tile, TileGrid, Frog, Tongue } from './GameObjects.js';
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -12,36 +13,11 @@ const ASSETS = {
     player: 'Sprites/frog.png',
 };
 
-const PLAYERSTATES = {
-    IDLE: 'IDLE',
-    EXTENDING: 'EXTENDING',
-    RETRACTING: 'RETRACTING',
-    DEATH: 'DEATH'
-};
 let playerState = PLAYERSTATES.IDLE;
 
-// Player Object
-const player = {
-    x: 400,
-    y: 350,
-    minRot: Math.PI/180 * -70,
-    maxRot: Math.PI/180 * 70,
-    rot: 0,
-    rotDirection: 1, // 1 for increasing, -1 for decreasing
-    size: 50,
-    speed: 2 // radians per second
-};
+const player = new Frog(400, 350);
 
-const tongue = {
-    x: player.x + player.size / 2,
-    y: player.y,
-    color: 'pink',
-    width: 5,
-    length: 0,
-    extendSpeed: 170,
-    retractSpeed: 250,
-    maxLength: 140
-};
+const tongue = new Tongue(player);
 
 const images = {};
 let loadedCount = 0;
@@ -107,83 +83,26 @@ function drawMenu() {
     }
 }
 
+const tileGrid = new TileGrid(
+    canvas.width / 4,  // startX
+    0,                  // startY
+    canvas.width / 2 / 30,  // cols
+    canvas.height / 2 / 30, // rows
+    30                  // tileSize
+);
+
 function drawGameWorld() {
-    //ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'lightblue';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawTiles();
-}
-
-function drawTiles() {
-    const tileSize = 30;
-    ctx.fillStyle = 'green';
-    for (let x = 0; x < canvas.width/2; x += tileSize) {
-        for (let y = 0; y < canvas.height/2; y += tileSize) {
-            ctx.fillRect(x+canvas.width/4, y, tileSize - 2, tileSize - 2); // -2 for spacing
-        }
-    }
-}
-
-function updatePhysics(deltaSeconds){
-    updatePlayer(deltaSeconds);
-    updateTongue(deltaSeconds);
-}
-
-function updatePlayer(deltaSeconds) {
-    // Rotate back and forth automatically
-    player.rot += player.rotDirection * player.speed * deltaSeconds;
-
-    // Reverse direction at limits
-    if (player.rot >= player.maxRot) {
-        player.rot = player.maxRot;
-        player.rotDirection = -1;
-    } else if (player.rot <= player.minRot) {
-        player.rot = player.minRot;
-        player.rotDirection = 1;
-    }
-
-    ctx.save();
-    ctx.translate(player.x + player.size / 2, player.y + player.size / 2);
-    ctx.rotate(player.rot);
     
-    // Only draw if image is loaded
-    if (images.player && images.player.complete) {
-        ctx.drawImage(images.player, -player.size / 2, -player.size / 2, player.size, player.size);
-    } else {
-        // Fallback: draw a red square if image not loaded
-        ctx.fillStyle = 'red';
-        ctx.fillRect(-player.size / 2, -player.size / 2, player.size, player.size);
-    }
-
-    ctx.fillStyle = tongue.color;
-    ctx.fillRect(0, -tongue.length, tongue.width, tongue.length);
-    ctx.restore();
+    tileGrid.draw(ctx);
+    player.draw(ctx, images);
+    tongue.draw(ctx);
 }
 
-function updateTongue(deltaSeconds) {
-        tongue.x = player.x + 23;
-    tongue.y = player.y + 18;
-
-    if (keys['Space'] && playerState === PLAYERSTATES.IDLE) {
-        playerState = PLAYERSTATES.EXTENDING;
-    }
-
-    switch (playerState) {
-        case PLAYERSTATES.EXTENDING:
-            tongue.length += tongue.extendSpeed * deltaSeconds;
-            if (tongue.length >= tongue.maxLength) {
-                tongue.length = tongue.maxLength;
-                playerState = PLAYERSTATES.RETRACTING;
-            }
-            break;
-        case PLAYERSTATES.RETRACTING:
-            tongue.length -= tongue.retractSpeed * deltaSeconds;
-            if (tongue.length <= 0) {
-                tongue.length = 0;
-                playerState = PLAYERSTATES.IDLE;
-            }
-            break;
-    }
+function updatePhysics(deltaSeconds) {
+    player.update(deltaSeconds);
+    tongue.update(deltaSeconds, keys['Space']);
 }
 
 preloadAssets(() => {
