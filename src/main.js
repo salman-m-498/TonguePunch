@@ -99,10 +99,33 @@ function updatePhysics(deltaSeconds) {
 
 function checkCollisions() {
     if(tongue.state !== PLAYERSTATES.EXTENDING || tongue.length <= 0) return;
-    
 
-}
+    const tongueTip = tongue.rotatePoint(0, -tongue.length);
+    const solidTiles = tileGrid.getSolidTiles();
+    
+    // Find the closest colliding SOLID tile
+    let closestTile = null;
+    let closestDist = Infinity;
+    
+    for (let tile of solidTiles) {
+        // Double-check it's solid (getSolidTiles should handle this)
+        if (tile.type !== 'solid') continue;
         
+        if (CollisionUtils.checkAABB(tongue, tile)) {
+            const tileCenterX = tile.x + tile.size / 2;
+            const tileCenterY = tile.y + tile.size / 2;
+            const dist = Math.hypot(tongueTip.x - tileCenterX, tongueTip.y - tileCenterY);
+            if (dist < closestDist) {
+                closestDist = dist;
+                closestTile = tile;
+            }
+        }
+    }
+    
+    if (closestTile) {
+        tongue.onCollision(closestTile);
+    }
+}
 
 preloadAssets(() => {
     console.log("All assets loaded!");
@@ -126,8 +149,8 @@ function gameLoop(timestamp) {
             
         case GAMEESTATES.PLAYING:
             drawGameWorld();
-            updatePhysics(deltaSeconds);
             checkCollisions();
+            updatePhysics(deltaSeconds);
             break;
 
         case GAMEESTATES.PAUSED:

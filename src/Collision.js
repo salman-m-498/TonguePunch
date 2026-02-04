@@ -2,6 +2,20 @@
 // Source: https://www.sevenson.com.au/programming/sat/
 
 export class CollisionUtils{
+    static checkAABB(objA, objB) {
+        const a = objA.getBroadBounds();
+        const b = objB.getBroadBounds();
+        const isNear = a.left < b.right &&
+                       a.right > b.left &&
+                       a.top < b.bottom &&
+                       a.bottom > b.top;
+
+        if (!isNear) return false; // Early exit
+
+        // Only run this if they are actually close
+        return this.checkSAT(objA, objB);
+    }
+
     static checkSAT(objA, objB) {
         const polyA = objA.getVertices();
         const polyB = objB.getVertices();
