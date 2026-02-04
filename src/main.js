@@ -1,4 +1,5 @@
 import {PLAYERSTATES, Tile, TileGrid, Frog, Tongue } from './GameObjects.js';
+import { CollisionUtils } from './Collision.js';
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -48,16 +49,7 @@ window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
 
 function update() {
-    if (keys['ArrowUp'])    player.y -= player.speed;
-    if (keys['ArrowDown'])  player.y += player.speed;
-    if (keys['ArrowLeft'])  player.x -= player.speed;
-    if (keys['ArrowRight']) player.x += player.speed;
-
-    // Simple Boundary Detection
-    if (player.x < 0) player.x = 0;
-    if (player.y < 0) player.y = 0;
-    if (player.x + player.size > canvas.width) player.x = canvas.width - player.size;
-    if (player.y + player.size > canvas.height) player.y = canvas.height - player.size;
+    // Placeholder for future updates
 }
 
 function drawMenu() {
@@ -105,6 +97,13 @@ function updatePhysics(deltaSeconds) {
     tongue.update(deltaSeconds, keys['Space']);
 }
 
+function checkCollisions() {
+    if(tongue.state !== PLAYERSTATES.EXTENDING || tongue.length <= 0) return;
+    
+
+}
+        
+
 preloadAssets(() => {
     console.log("All assets loaded!");
     gameLoop(); 
@@ -128,7 +127,7 @@ function gameLoop(timestamp) {
         case GAMEESTATES.PLAYING:
             drawGameWorld();
             updatePhysics(deltaSeconds);
-            //checkCollisions();
+            checkCollisions();
             break;
 
         case GAMEESTATES.PAUSED:
