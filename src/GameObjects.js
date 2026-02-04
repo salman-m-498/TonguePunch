@@ -31,17 +31,30 @@ export class Tile extends GameObject {
     constructor(x, y, size, type = 'solid') {
         super(x, y);
         this.size = size;
+        this.gapSize = 7;
         this.type = type; // 'solid', 'empty', 'hazard'
     }
 
     getVertices() {
-        return [
-            { x: this.x, y: this.y },
-            { x: this.x + this.size, y: this.y },
-            { x: this.x + this.size, y: this.y + this.size },
-            { x: this.x, y: this.y + this.size }
-        ];
-    }
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+    const hw = this.width / 2;
+    const hh = this.height / 2;
+
+    // The 4 corners relative to center
+    const corners = [
+        { x: -hw, y: -hh }, { x: hw, y: -hh },
+        { x: hw, y: hh }, { x: -hw, y: hh }
+    ];
+
+    // Rotate and translate corners to world space
+    return corners.map(p => {
+        return {
+            x: cx + p.x * Math.cos(this.rot) - p.y * Math.sin(this.rot),
+            y: cy + p.x * Math.sin(this.rot) + p.y * Math.cos(this.rot)
+        };
+    });
+}
 
     draw(ctx) {
         switch (this.type) {
@@ -54,7 +67,7 @@ export class Tile extends GameObject {
             default:
                 return; // Don't draw empty tiles
         }
-        ctx.fillRect(this.x, this.y, this.size - 2, this.size - 2);
+        ctx.fillRect(this.x, this.y, this.size - this.gapSize, this.size - this.gapSize);
     }
 }
 
@@ -92,6 +105,7 @@ export class Frog extends GameObject {
         this.minRot = Math.PI / 180 * -70;
         this.maxRot = Math.PI / 180 * 70;
         this.rotDirection = 1;
+        this.canRotate = true;
         this.speed = 2;
     }
 
@@ -106,7 +120,13 @@ export class Frog extends GameObject {
         return localVerts.map(v => this.rotatePoint(v.x, v.y));
     }
 
-    update(deltaSeconds) {
+    update(deltaSeconds, canRotate) {
+        this.rotate(deltaSeconds, canRotate);
+    }
+
+    rotate(deltaSeconds){
+        if (!this.canRotate) return;
+
         this.rotation += this.rotDirection * this.speed * deltaSeconds;
 
         if (this.rotation >= this.maxRot) {
@@ -142,7 +162,7 @@ export class Tongue extends GameObject {
         this.length = 0;
         this.extendSpeed = 170;
         this.retractSpeed = 250;
-        this.maxLength = 140;
+        this.maxLength = 200;
         this.state = PLAYERSTATES.IDLE;
     }
 
@@ -171,10 +191,12 @@ export class Tongue extends GameObject {
 
         switch (this.state) {
             case PLAYERSTATES.EXTENDING:
+                this.frog.canRotate = false;
                 this.length += this.extendSpeed * deltaSeconds;
                 if (this.length >= this.maxLength) {
                     this.length = this.maxLength;
                     this.state = PLAYERSTATES.RETRACTING;
+                    this.frog.canRotate = true;
                 }
                 break;
             case PLAYERSTATES.RETRACTING:
@@ -182,6 +204,7 @@ export class Tongue extends GameObject {
                 if (this.length <= 0) {
                     this.length = 0;
                     this.state = PLAYERSTATES.IDLE;
+                    this.frog.canRotate = true;
                 }
                 break;
         }
