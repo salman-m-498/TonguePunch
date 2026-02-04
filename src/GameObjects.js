@@ -123,6 +123,15 @@ export class Frog extends GameObject {
         this.rotDirection = 1;
         this.canRotate = true;
         this.speed = 2.5;
+        this.frameIndex = 0;
+        this.animTimer = 0;
+        this.animSpeed = 0.2;
+        this.animations = {
+            [PLAYERSTATES.IDLE]: { frames: ["fwoggie 1.png", "fwoggie 2.png", "fwoggie 3.png"], 
+                loop: true },
+            [PLAYERSTATES.DEATH]: { frames: ["fwoggie dead.png"], loop: false }
+        };
+        this.state = PLAYERSTATES.IDLE;
     }
 
     getVertices() {
@@ -135,6 +144,19 @@ export class Frog extends GameObject {
     }
 
     update(deltaSeconds) {
+        // Animation
+        this.animTimer += deltaSeconds;
+        if (this.animTimer >= this.animSpeed) {
+            this.animTimer = 0;
+            const anim = this.animations[this.state];
+            if (anim) {
+                this.frameIndex++;
+                if (this.frameIndex >= anim.frames.length) {
+                    this.frameIndex = anim.loop ? 0 : anim.frames.length - 1;
+                }
+            }
+        }
+
         if (!this.canRotate) return;
 
         this.rotation += this.rotDirection * this.speed * deltaSeconds;
@@ -148,22 +170,23 @@ export class Frog extends GameObject {
         }
     }
 
-    draw(ctx, images) {
+    draw(ctx, images, atlas) {
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(this.rotation);
 
-        if (images.player && images.player.complete) {
-            ctx.drawImage(images.player, -this.size / 2, -this.size / 2, this.size, this.size);
-        } else {
-            // Placeholder: Triangle pointing "up" (where tongue goes)
-            ctx.fillStyle = '#4caf50';
-            ctx.beginPath();
-            ctx.moveTo(0, -this.size / 2);
-            ctx.lineTo(this.size / 2, this.size / 2);
-            ctx.lineTo(-this.size / 2, this.size / 2);
-            ctx.closePath();
-            ctx.fill();
+        if (images.frogSpritesheet && atlas) {
+        const anim = this.animations[this.state];
+        const frameName = anim.frames[this.frameIndex];
+        const frameData = atlas.frames[frameName].frame;
+
+        ctx.drawImage(
+            images.frogSpritesheet,
+            frameData.x, frameData.y, // Source X, Y from JSON
+            frameData.w, frameData.h, // Source W, H from JSON
+            -this.size / 2, -this.size / 2, // Center on frog position
+            this.size, this.size      // Scale to frog size
+            );
         }
         ctx.restore();
     }

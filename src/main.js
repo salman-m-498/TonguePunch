@@ -10,31 +10,34 @@ const GAMEESTATES = {
     GAMEOVER: 'GAMEOVER'
 };
 
-const ASSETS = {
-    player: 'Sprites/frog.png',
-};
-
-let playerState = PLAYERSTATES.IDLE;
-
 const player = new Frog(400, 350);
 
 const tongue = new Tongue(player);
 
 const images = {};
-let loadedCount = 0;
-const totalAssets = Object.keys(ASSETS).length;
+let frogAtlas = null;
 
-function preloadAssets(callback) {
-    for (let key in ASSETS) {
+async function preloadAssets() {
+    const loadImage = (src) => new Promise((resolve, reject) => {
         const img = new Image();
-        img.src = ASSETS[key];
-        img.onload = () => {
-            loadedCount++;
-            images[key] = img; // Save to cache
-            if (loadedCount === totalAssets) {
-                callback(); // Start the game loop
-            }
-        };
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+    });
+
+    try {
+        const [funcSheet, atlas] = await Promise.all([
+            loadImage('./Sprites/fwoggie-ss.png'),
+            fetch('./Sprites/fwoggie-ss.json').then(r => r.json())
+        ]);
+
+        images.frogSpritesheet = funcSheet;
+        frogAtlas = atlas;
+        
+        console.log('Assets loaded!');
+        // Game loop is already running
+    } catch (e) {
+        console.error('Error loading assets:', e);
     }
 }
 
@@ -88,7 +91,7 @@ function drawGameWorld() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     tileGrid.draw(ctx);
-    player.draw(ctx, images);
+    player.draw(ctx, images, frogAtlas);
     tongue.draw(ctx);
 }
 
@@ -127,10 +130,7 @@ function checkCollisions() {
     }
 }
 
-preloadAssets(() => {
-    console.log("All assets loaded!");
-    gameLoop(); 
-});
+preloadAssets();
 
 function gameLoop(timestamp) {
     if (!lastTime) {
