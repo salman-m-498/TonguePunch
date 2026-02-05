@@ -139,6 +139,17 @@ export class HardenedTile extends Tile {
             projectile.velocity.y *= -1;
         }
     }
+
+    draw(ctx) {
+        if (this.type === 'empty') return;
+        
+        ctx.save();
+        if (this.hp === 2) ctx.fillStyle = '#5e501b';
+        else if (this.hp === 1) ctx.fillStyle = '#8d6e63';
+        ctx.fillRect(this.x + this.gapSize, this.y + this.gapSize, 
+                     this.size - this.gapSize * 2, this.size - this.gapSize * 2);
+        ctx.restore();
+    }
 }
 
 export class TileGrid {
