@@ -2,6 +2,7 @@ export const PLAYERSTATES = {
     IDLE: 'IDLE',
     EXTENDING: 'EXTENDING',
     RETRACTING: 'RETRACTING',
+    LOADED: 'LOADED',
     DEATH: 'DEATH'
 };
 
@@ -46,7 +47,16 @@ export class Tile extends GameObject {
         this.width = size;
         this.height = size;
         this.gapSize = 2; // Reduced gap for better collision feel
-        this.type = type; 
+        this.velocity = { x: 0, y: 0 }; 
+        this.type = type;
+        this.canPickup = true; //
+        this.isMoving = false;
+    }
+
+    update(deltaSeconds) {
+        if (!this.isMoving) return;
+        this.x += this.velocity.x * deltaSeconds;
+        this.y += this.velocity.y * deltaSeconds;
     }
 
     getVertices() {
@@ -76,7 +86,10 @@ export class Tile extends GameObject {
         if (this.type === 'empty') return;
         
         ctx.save();
-        ctx.fillStyle = this.type === 'solid' ? '#2e7d32' : '#c62828';
+        if (this.type === 'solid') ctx.fillStyle = '#2e7d32';
+        else if (this.type === 'held') ctx.fillStyle = '#66bb6a'; // Lighter green
+        else ctx.fillStyle = '#c62828'; // Projectile or other
+
         // Drawing slightly smaller than the collision box for a "grid" look
         ctx.fillRect(this.x + this.gapSize, this.y + this.gapSize, 
                      this.size - this.gapSize * 2, this.size - this.gapSize * 2);
@@ -116,7 +129,7 @@ export class Frog extends GameObject {
     constructor(x, y) {
         super(x, y);
         this.size = 50;
-        this.width = this.size;
+        this.width = this.size + 10;
         this.height = this.size;
         this.minRot = (Math.PI / 180) * -70;
         this.maxRot = (Math.PI / 180) * 70;
@@ -144,6 +157,7 @@ export class Frog extends GameObject {
     }
 
     update(deltaSeconds) {
+        // TODO: Refactor Animation functions into separate Animator class
         // Animation
         this.animTimer += deltaSeconds;
         if (this.animTimer >= this.animSpeed) {
@@ -156,7 +170,7 @@ export class Frog extends GameObject {
                 }
             }
         }
-
+        
         if (!this.canRotate) return;
 
         this.rotation += this.rotDirection * this.speed * deltaSeconds;
@@ -201,6 +215,7 @@ export class Tongue extends GameObject {
         this.extendSpeed = 400;
         this.retractSpeed = 600;
         this.maxLength = 350;
+        this.attachedTile = null;
         this.state = PLAYERSTATES.IDLE;
     }
 
@@ -230,16 +245,37 @@ export class Tongue extends GameObject {
         };
     }
 
+    // Helper to find the world-space tip of the tongue
+    getTipPosition() {
+        return this.rotatePoint(0, -this.length);
+    }
+
     update(deltaSeconds, spacePressed) {
         this.x = this.frog.x;
         this.y = this.frog.y;
         this.rotation = this.frog.rotation;
 
-        if (spacePressed && this.state === PLAYERSTATES.IDLE) {
-            this.state = PLAYERSTATES.EXTENDING;
+        if (spacePressed) {
+            if (this.state === PLAYERSTATES.IDLE) {
+                this.state = PLAYERSTATES.EXTENDING;
+            } else if (this.state === PLAYERSTATES.LOADED) {
+                this.shootTile();
+                return;
+            }
         }
 
         switch (this.state) {
+            case PLAYERSTATES.LOADED:
+                if (this.attachedTile) {
+                     // Keep tile at mouth
+                     const mouthPos = this.rotatePoint(0, -20); // Slightly in front
+                     this.attachedTile.x = mouthPos.x - this.attachedTile.size/2;
+                     this.attachedTile.y = mouthPos.y - this.attachedTile.size/2;
+                } else {
+                     this.state = PLAYERSTATES.IDLE;
+                }
+                break;
+
             case PLAYERSTATES.EXTENDING:
                 this.frog.canRotate = false; // Lock frog
                 this.length += this.extendSpeed * deltaSeconds;
@@ -253,15 +289,48 @@ export class Tongue extends GameObject {
                 
             case PLAYERSTATES.RETRACTING:
                 this.length -= this.retractSpeed * deltaSeconds;
+
+                // If we have a tile, make it follow the tip of the tongue
+                if (this.attachedTile) {
+                    const tipPos = this.getTipPosition(); // Helper to find the end of the tongue
+                    this.attachedTile.x = tipPos.x - this.attachedTile.size / 2;
+                    this.attachedTile.y = tipPos.y - this.attachedTile.size / 2;
+                }
+
                 this.height = this.length; // Update height for collision detection
                 if (this.length <= 0) {
                     this.length = 0;
                     this.height = 0;
-                    this.state = PLAYERSTATES.IDLE;
+                    // If we brought a tile back, stay in IDLE but keep the tile at the Frog's mouth
+                    if (this.attachedTile) {
+                        this.state = PLAYERSTATES.LOADED; 
+                    } else {
+                        this.state = PLAYERSTATES.IDLE;
+                    }
                     this.frog.canRotate = true; // Unlock frog
                 }
                 break;
         }
+    }
+
+    shootTile() {
+        if (!this.attachedTile) return;
+        
+        const shootSpeed = 600;
+        // The tongue extends "up" from the frog (negative Y local space)
+        // We use the same direction for shooting
+        const dir = this.rotatePoint(0, -1);
+        const dx = dir.x - this.x;
+        const dy = dir.y - this.y;
+        const len = Math.hypot(dx, dy);
+        
+        this.attachedTile.velocity.x = (dx / len) * shootSpeed;
+        this.attachedTile.velocity.y = (dy / len) * shootSpeed;
+        this.attachedTile.isMoving = true;
+        this.attachedTile.type = 'projectile';
+        
+        this.attachedTile = null;
+        this.state = PLAYERSTATES.IDLE;
     }
 
     draw(ctx) {
@@ -284,7 +353,11 @@ export class Tongue extends GameObject {
 
     onCollision(tile) {
         console.log("Tongue collided with tile at:", tile.x, tile.y);
-        tile.type = 'empty'; // Example effect: remove tile
+        if (tile.canPickup) {
+            console.log("Picked up tile!");
+            this.attachedTile = tile;
+            tile.type = 'held';
+        }
         this.state = PLAYERSTATES.RETRACTING;
     }
 }

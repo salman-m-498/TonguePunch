@@ -2,13 +2,21 @@
 // Source: https://www.sevenson.com.au/programming/sat/
 
 export class CollisionUtils{
+    static checkBoundaries(obj, canvas) {
+        if (obj.x < 150) return 'left';
+        if (obj.x + obj.size > 650) return 'right';
+        if (obj.y < 0) return 'top';
+        if (obj.y + obj.size > canvas.height) return 'bottom';
+        return null; // No collision
+    }
+
     static checkAABB(objA, objB) {
         const a = objA.getBroadBounds();
         const b = objB.getBroadBounds();
         const isNear = a.left < b.right &&
                        a.right > b.left &&
                        a.top < b.bottom &&
-                       a.bottom > b.top;
+                       a.bottom > b.top;  
 
         if (!isNear) return false; // Early exit
 

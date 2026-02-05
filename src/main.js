@@ -3,6 +3,12 @@ import { CollisionUtils } from './Collision.js';
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+const GAME_CONFIG = {
+    playWidth: 500, // The width of the actual game area
+    get leftBound() { return (canvas.width - this.playWidth) / 2; },
+    get rightBound() { return (canvas.width + this.playWidth) / 2; }
+};
+
 const GAMEESTATES = {
     MENU: 'MENU',
     PLAYING: 'PLAYING',
@@ -44,11 +50,15 @@ async function preloadAssets() {
 let currentState = GAMEESTATES.MENU;
 
 let keys = {};
+let keysJustPressed = {};
 
 let lastTime = 0;
 
 // Listen for keyboard input
-window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keydown', e => {
+    if (!keys[e.code]) keysJustPressed[e.code] = true;
+    keys[e.code] = true;
+});
 window.addEventListener('keyup', e => keys[e.code] = false);
 
 function update() {
@@ -78,12 +88,18 @@ function drawMenu() {
     }
 }
 
+const tileSize = 30;
+const cols = Math.floor(GAME_CONFIG.playWidth / tileSize);
+const rows = Math.floor(canvas.height / 2 / tileSize);
+const gridWidth = cols * tileSize;
+const startX = GAME_CONFIG.leftBound + (GAME_CONFIG.playWidth - gridWidth) / 2;
+
 const tileGrid = new TileGrid(
-    canvas.width / 4,  // startX
-    0,                  // startY
-    canvas.width / 2 / 30,  // cols
-    canvas.height / 2 / 30, // rows
-    30                  // tileSize
+    startX,
+    0,     // startY
+    cols,
+    rows,
+    tileSize
 );
 
 function drawGameWorld() {
@@ -91,43 +107,106 @@ function drawGameWorld() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     tileGrid.draw(ctx);
+    
+    // Draw attached tile on top if it exists
+    if (tongue.attachedTile) {
+        tongue.attachedTile.draw(ctx);
+    }
+
     player.draw(ctx, images, frogAtlas);
     tongue.draw(ctx);
 }
 
+function drawHUD() {
+    ctx.fillStyle = 'black';
+    // Left Bar: From 0 to the start of the play zone
+    ctx.fillRect(0, 0, GAME_CONFIG.leftBound, canvas.height);
+    
+    // Right Bar: From the end of the play zone to the canvas edge
+    ctx.fillRect(GAME_CONFIG.rightBound, 0, canvas.width - GAME_CONFIG.rightBound, canvas.height);
+}
+
 function updatePhysics(deltaSeconds) {
     player.update(deltaSeconds);
-    tongue.update(deltaSeconds, keys['Space']);
+    tongue.update(deltaSeconds, keysJustPressed['Space']);
+    
+    // Update all tiles (for projectiles)
+    tileGrid.tiles.forEach(t => t.update(deltaSeconds));
+
+    // Reset one-frame inputs
+    keysJustPressed = {};
 }
 
 function checkCollisions() {
-    if(tongue.state !== PLAYERSTATES.EXTENDING || tongue.length <= 0) return;
 
-    const tongueTip = tongue.rotatePoint(0, -tongue.length);
-    const solidTiles = tileGrid.getSolidTiles();
-    
-    // Find the closest colliding SOLID tile
-    let closestTile = null;
-    let closestDist = Infinity;
-    
-    for (let tile of solidTiles) {
-        // Double-check it's solid (getSolidTiles should handle this)
-        if (tile.type !== 'solid') continue;
+    // 0. Tongue Boundary Check
+    if (tongue.state === PLAYERSTATES.EXTENDING && tongue.length > 0) {
+        const tongueTip = tongue.rotatePoint(0, -tongue.length);
+        // Create a temporary object with size for the check
+        const tipObj = { x: tongueTip.x, y: tongueTip.y, size: 10 }; 
         
-        if (CollisionUtils.checkAABB(tongue, tile)) {
-            const tileCenterX = tile.x + tile.size / 2;
-            const tileCenterY = tile.y + tile.size / 2;
-            const dist = Math.hypot(tongueTip.x - tileCenterX, tongueTip.y - tileCenterY);
-            if (dist < closestDist) {
-                closestDist = dist;
-                closestTile = tile;
-            }
+        if (CollisionUtils.checkBoundaries(tipObj, canvas) != null) {
+            tongue.state = PLAYERSTATES.RETRACTING;
         }
     }
-    
-    if (closestTile) {
-        tongue.onCollision(closestTile);
+
+    tileGrid.tiles.filter(t => t.type === 'projectile').forEach(flyingTile => {
+        
+        // 1. Check Canvas Boundaries
+        const wall = CollisionUtils.checkBoundaries(flyingTile, canvas);
+        if (wall) {
+            if (wall === 'left' || wall === 'right') flyingTile.velocity.x *= -1;
+            if (wall === 'top' || wall === 'bottom') flyingTile.velocity.y *= -1;
+        }
+
+        // 2. Check Other Tiles
+        tileGrid.getSolidTiles().forEach(otherTile => {
+            if (flyingTile === otherTile) return;
+
+            if (CollisionUtils.checkAABB(flyingTile, otherTile)) {
+                // otherTile.onHit(flyingTile); // Tile handles its own logic
+                // For now, destroy both
+                flyingTile.type = 'empty';
+                flyingTile.isMoving = false;
+                otherTile.type = 'empty';
+            }
+        });
+    });
+
+    const solidTiles = tileGrid.getSolidTiles();
+
+    // 1. Tongue vs Tiles (Grabbing)
+    if(tongue.state === PLAYERSTATES.EXTENDING && tongue.length > 0) {
+        const tongueTip = tongue.rotatePoint(0, -tongue.length);
+
+        // Find the closest colliding SOLID tile
+        let closestTile = null;
+        let closestDist = Infinity;
+        
+        for (let tile of solidTiles) {
+            // Double-check it's solid
+            if (tile.type !== 'solid') continue;
+            
+            if (CollisionUtils.checkAABB(tongue, tile)) {
+                
+                // Refinement: Check distance to center
+                const tileCenterX = tile.x + tile.size / 2;
+                const tileCenterY = tile.y + tile.size / 2;
+                const dist = Math.hypot(tongueTip.x - tileCenterX, tongueTip.y - tileCenterY);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestTile = tile;
+                }
+            }
+        }
+        
+        if (closestTile) {
+            tongue.onCollision(closestTile);
+        }
     }
+
+    // 2. Projectiles vs Tiles
+    // Handled in the loop above now
 }
 
 preloadAssets();
@@ -149,6 +228,7 @@ function gameLoop(timestamp) {
             
         case GAMEESTATES.PLAYING:
             drawGameWorld();
+            drawHUD();
             checkCollisions();
             updatePhysics(deltaSeconds);
             break;
