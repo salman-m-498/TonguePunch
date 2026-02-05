@@ -46,11 +46,13 @@ export class Tile extends GameObject {
         this.size = size;
         this.width = size;
         this.height = size;
-        this.gapSize = 2; // Reduced gap for better collision feel
+        this.gapSize = 2;
         this.velocity = { x: 0, y: 0 }; 
         this.type = type;
-        this.canPickup = true; //
+        this.canPickup = true
         this.isMoving = false;
+        this.bounceCount = 0;
+        this.maxBounces = 5;
     }
 
     update(deltaSeconds) {
@@ -81,12 +83,28 @@ export class Tile extends GameObject {
             };
         });
     }
+    // Call this whenever the tile hits a wall or another tile
+    registerBounce() {
+        this.bounceCount++;
+        
+        if (this.bounceCount >= this.maxBounces) {
+            this.destroy();
+        }
+    }
+
+    destroy() {
+        this.isMoving = false;
+        this.velocity = { x: 0, y: 0 };
+        this.type = 'empty'; // Or trigger a particle effect/animation
+        console.log("Tile shattered from too many bounces!");
+    }
 
     draw(ctx) {
         if (this.type === 'empty') return;
         
         ctx.save();
         if (this.type === 'solid') ctx.fillStyle = '#2e7d32';
+        else if (this.type === 'hardened') ctx.fillStyle = '#5e501b';
         else if (this.type === 'held') ctx.fillStyle = '#66bb6a'; // Lighter green
         else ctx.fillStyle = '#c62828'; // Projectile or other
 
@@ -97,6 +115,32 @@ export class Tile extends GameObject {
     }
 }
 
+export class HardenedTile extends Tile {
+    constructor(x, y, size) {
+        super(x, y, size, 'hardened');
+        this.hp = 2;
+        this.canPickup = false; // Cannot be picked up
+    }
+
+    onHit(projectile) {
+        this.hp -= 1;
+        this.reflectProjectile(projectile);
+        if (this.hp <= 0) {
+            this.type = 'empty';
+        }
+    }
+    reflectProjectile(projectile) {
+        const dx = (projectile.x + projectile.size / 2) - (this.x + this.size / 2);
+        const dy = (projectile.y + projectile.size / 2) - (this.y + this.size / 2);
+
+        if (Math.abs(dx) > Math.abs(dy)) {
+            projectile.velocity.x *= -1;
+        } else {
+            projectile.velocity.y *= -1;
+        }
+    }
+}
+
 export class TileGrid {
     constructor(startX, startY, cols, rows, tileSize) {
         this.tiles = [];
@@ -104,12 +148,31 @@ export class TileGrid {
 
         for (let row = 0; row < rows; row++) {
             for (let col = 0; col < cols; col++) {
-                const tile = new Tile(
-                    startX + col * tileSize,
-                    startY + row * tileSize,
-                    tileSize,
-                    'solid'
-                );
+                
+                const rand = Math.random();
+                let type = 'solid'; // Default
+                
+                // 30% chance for hardened, and the rest solid:
+                if (rand > 0.7) { 
+                    type = 'hardened';
+                }
+
+                let tile;
+                if (type === 'hardened') {
+                    tile = new HardenedTile(
+                        startX + col * tileSize,
+                        startY + row * tileSize,
+                        tileSize
+                    );
+                } else {
+                    tile = new Tile(
+                        startX + col * tileSize,
+                        startY + row * tileSize,
+                        tileSize,
+                        type
+                    );
+                }
+                
                 this.tiles.push(tile);
             }
         }
@@ -121,6 +184,9 @@ export class TileGrid {
 
     getSolidTiles() {
         return this.tiles.filter(t => t.type === 'solid');
+    }
+    getHardenedTiles() {
+        return this.tiles.filter(t => t.type === 'hardened');
     }
 }
 

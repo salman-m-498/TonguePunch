@@ -6,7 +6,7 @@ const ctx = canvas.getContext('2d');
 const GAME_CONFIG = {
     playWidth: 500, // The width of the actual game area
     get leftBound() { return (canvas.width - this.playWidth) / 2; },
-    get rightBound() { return (canvas.width + this.playWidth) / 2; }
+    get rightBound() { return (canvas.width + this.playWidth) / 2; },
 };
 
 const GAMEESTATES = {
@@ -157,42 +157,56 @@ function checkCollisions() {
         if (wall) {
             if (wall === 'left' || wall === 'right') flyingTile.velocity.x *= -1;
             if (wall === 'top' || wall === 'bottom') flyingTile.velocity.y *= -1;
+
+            flyingTile.registerBounce();
         }
 
         // 2. Check Other Tiles
-        tileGrid.getSolidTiles().forEach(otherTile => {
+        const targets = tileGrid.tiles.filter(t => t.type === 'solid' || t.type === 'hardened');
+        targets.forEach(otherTile => {
             if (flyingTile === otherTile) return;
 
             if (CollisionUtils.checkAABB(flyingTile, otherTile)) {
-                // otherTile.onHit(flyingTile); // Tile handles its own logic
-                // For now, destroy both
-                flyingTile.type = 'empty';
-                flyingTile.isMoving = false;
-                otherTile.type = 'empty';
+                
+                if (otherTile.type === 'hardened') {
+                    // Logic: Damage the wall, bounce the projectile
+                    // This assumes otherTile is an instance of HardenedTile class
+                    if (typeof otherTile.onHit === 'function') {
+                        otherTile.onHit(flyingTile);
+                        flyingTile.registerBounce();
+                    }
+                } else {
+                    // Logic: Standard 'Solid' tile - destroy both
+                    flyingTile.type = 'empty';
+                    flyingTile.isMoving = false;
+                    otherTile.type = 'empty';
+                    flyingTile.registerBounce();
+                }
             }
         });
     });
 
-    const solidTiles = tileGrid.getSolidTiles();
+    const candidates = tileGrid.tiles.filter(t => 
+        t.type !== 'empty' && 
+        t.type !== 'held' && 
+        t.type !== 'projectile'
+    );
 
-    // 1. Tongue vs Tiles (Grabbing)
     if(tongue.state === PLAYERSTATES.EXTENDING && tongue.length > 0) {
         const tongueTip = tongue.rotatePoint(0, -tongue.length);
 
-        // Find the closest colliding SOLID tile
+        // Find the closest colliding tile regardless of type
         let closestTile = null;
         let closestDist = Infinity;
         
-        for (let tile of solidTiles) {
-            // Double-check it's solid
-            if (tile.type !== 'solid') continue;
-            
+        for (let tile of candidates) {
             if (CollisionUtils.checkAABB(tongue, tile)) {
                 
-                // Refinement: Check distance to center
+                // Refinement: Check distance to center to ensure we pick the first one hit
                 const tileCenterX = tile.x + tile.size / 2;
                 const tileCenterY = tile.y + tile.size / 2;
                 const dist = Math.hypot(tongueTip.x - tileCenterX, tongueTip.y - tileCenterY);
+                
                 if (dist < closestDist) {
                     closestDist = dist;
                     closestTile = tile;
@@ -201,12 +215,29 @@ function checkCollisions() {
         }
         
         if (closestTile) {
-            tongue.onCollision(closestTile);
+            // CENTRALIZED INTERACTION LOGIC
+            switch (closestTile.type) {
+                case 'solid':
+                    // Grabbable: Latch onto it
+                    tongue.onCollision(closestTile);
+                    break;
+                
+                case 'hardened':
+                    // Not Grabbable: "Clink" off and return
+                    tongue.state = PLAYERSTATES.RETRACTING;
+                    break;
+
+                // Future Case Examples:
+                // case 'sticky': tongue.stop(); break; 
+                // case 'explosive': closestTile.explode(); break;
+
+                default:
+                    // Safety fallback
+                    tongue.state = PLAYERSTATES.RETRACTING;
+                    break;
+            }
         }
     }
-
-    // 2. Projectiles vs Tiles
-    // Handled in the loop above now
 }
 
 preloadAssets();
