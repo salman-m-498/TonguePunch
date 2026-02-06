@@ -1,4 +1,6 @@
-import {PLAYERSTATES, Tile, TileGrid, Frog, Tongue } from './GameObjects.js';
+import { PLAYERSTATES } from './constants/States.js';
+import { Frog, Tongue } from './entities/Player.js';
+import { TileGrid } from './entities/tiles/index.js';
 import { CollisionUtils } from './Collision.js';
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');

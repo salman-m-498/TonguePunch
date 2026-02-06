@@ -1,0 +1,7 @@
+export const PLAYERSTATES = {
+    IDLE: 'IDLE',
+    EXTENDING: 'EXTENDING',
+    RETRACTING: 'RETRACTING',
+    LOADED: 'LOADED',
+    DEATH: 'DEATH'
+};
